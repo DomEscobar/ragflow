@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Ragflow – Document Upload and Parse API
+  version: 1.0.0
+  description: |
+    Uploads one or more document files and automatically parses them into chunks
+    for a specific conversation. The documents are associated with the knowledge base
+    linked to the conversation.
+
+paths:
+  /v1/document/upload_and_parse:
+    post:
+      summary: Upload and parse documents
+      description: |
+        Uploads files and processes them into text chunks for the knowledge base
+        associated with the specified conversation. 
+        
+        This endpoint:
+        1. Associates documents with the first knowledge base connected to the conversation
+        2. Automatically determines the best parser based on file type
+        3. Chunks the document content with appropriate strategies
+        4. Creates embeddings for each chunk
+        5. Stores these in the search database for retrieval
+        6. Generates a mind map summary (except for image files)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - conversation_id
+                - file
+              properties:
+                conversation_id:
+                  type: string
+                  description: ID of the conversation to associate the documents with
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more document files to upload and parse
+      responses:
+        '200':
+          description: Documents successfully uploaded and being processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentIdsResponse'
+        '400':
+          description: Missing or invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/api/document/upload_and_parse:
+    post:
+      summary: Upload and parse documents (API token)
+      description: |
+        External API version of the document upload and parse endpoint.
+        Uses API token authorization instead of session-based authentication.
+        
+        This endpoint functions identically to /v1/document/upload_and_parse:
+        1. Associates documents with the first knowledge base connected to the conversation
+        2. Automatically determines the best parser based on file type
+        3. Chunks the document content with appropriate strategies
+        4. Creates embeddings for each chunk
+        5. Stores these in the search database for retrieval
+        6. Generates a mind map summary (except for image files)
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - conversation_id
+                - file
+              properties:
+                conversation_id:
+                  type: string
+                  description: ID of the conversation to associate the documents with
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more document files to upload and parse
+      responses:
+        '200':
+          description: Documents successfully uploaded and being processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentIdsResponse'
+        '400':
+          description: Missing or invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Regular user authentication token
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Format - "Bearer <api_token>"
+
+  schemas:
+    RetCode:
+      type: integer
+      description: Business-level response code
+      enum: 
+        - 0    # SUCCESS
+        - 101  # ARGUMENT_ERROR
+        - 109  # AUTHENTICATION_ERROR
+        - 500  # SERVER_ERROR
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/RetCode'
+        message:
+          type: string
+        data:
+          type: boolean
+          example: false
+
+    DocumentIdsResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          $ref: '#/components/schemas/RetCode'
+          example: 0
+        message:
+          type: string
+          example: success
+        data:
+          type: array
+          items:
+            type: string
+            description: Document IDs for the uploaded files
+          example: ["64cf05c1eb8a4d98b502f63f", "64cf05c1eb8a4d98b502f640"]

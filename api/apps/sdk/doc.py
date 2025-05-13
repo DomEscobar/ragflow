@@ -1473,3 +1473,87 @@ def retrieval_test(tenant_id):
                 code=settings.RetCode.DATA_ERROR,
             )
         return server_error_response(e)
+
+
+@manager.route("/datasets/<dataset_id>/documents/upload_and_parse", methods=["POST"])  # noqa: F821
+@token_required
+def upload_and_parse(tenant_id, dataset_id):
+    """
+    Upload and parse documents to a dataset in a single operation.
+    ---
+    tags:
+      - Documents
+    security:
+      - ApiKeyAuth: []
+    parameters:
+      - in: path
+        name: dataset_id
+        type: string
+        required: true
+        description: ID of the dataset.
+      - in: header
+        name: Authorization
+        type: string
+        required: true
+        description: Bearer token for authentication.
+      - in: formData
+        name: file
+        type: file
+        required: true
+        description: Document files to upload and parse.
+    responses:
+      200:
+        description: Successfully uploaded and parsed documents.
+        schema:
+          type: object
+          properties:
+            data:
+              type: array
+              items:
+                type: string
+                description: Document IDs.
+    """
+    if "file" not in request.files:
+        return get_error_data_result(
+            message="No file part!", code=settings.RetCode.ARGUMENT_ERROR
+        )
+    
+    file_objs = request.files.getlist("file")
+    for file_obj in file_objs:
+        if file_obj.filename == "":
+            return get_result(
+                message="No file selected!", code=settings.RetCode.ARGUMENT_ERROR
+            )
+        if len(file_obj.filename.encode("utf-8")) >= 128:
+            return get_result(
+                message="File name should be less than 128 bytes.", code=settings.RetCode.ARGUMENT_ERROR
+            )
+    
+    e, kb = KnowledgebaseService.get_by_id(dataset_id)
+    if not e:
+        raise LookupError(f"Can't find the dataset with ID {dataset_id}!")
+    
+    if kb.tenant_id != tenant_id:
+        return get_error_data_result(message="You don't own this dataset!")
+    
+    # First upload the files
+    err, files = FileService.upload_document(kb, file_objs, tenant_id)
+    if err:
+        return get_result(message="\n".join(err), code=settings.RetCode.SERVER_ERROR)
+    
+    # Get document IDs
+    doc_ids = [file[0]["id"] for file in files]
+    
+    # Start parsing immediately
+    for doc_id in doc_ids:
+        info = {"run": "1", "progress": 0, "progress_msg": "", "chunk_num": 0, "token_num": 0}
+        DocumentService.update_by_id(doc_id, info)
+        settings.docStoreConn.delete({"doc_id": doc_id}, search.index_name(tenant_id), dataset_id)
+        TaskService.filter_delete([Task.doc_id == doc_id])
+        e, doc = DocumentService.get_by_id(doc_id)
+        doc = doc.to_dict()
+        doc["tenant_id"] = tenant_id
+        bucket, name = File2DocumentService.get_storage_address(doc_id=doc["id"])
+        queue_tasks(doc, bucket, name, 0)
+    
+    return get_result(data=doc_ids)

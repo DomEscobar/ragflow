@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: RagFlow API – User Registration
+  version: "1.0"
+  description: |
+    Register a new user.  
+    When registration succeeds the server also:
+
+    • Creates a personal tenant (same UUID as the user)  
+    • Sets up default LLM/API-key records  
+    • Creates the root “/” folder in the tenant’s file tree  
+    • Logs the user in and returns a short-lived JWT-wrapped **Authorization** header
+servers:
+  - url: /v1            # Same prefix used in web/src/utils/api.ts
+tags:
+  - name: User
+paths:
+  /user/register:
+    post:
+      tags: [User]
+      summary: Register a new user
+      description: |
+        Creates an account when `REGISTER_ENABLED` is `true` in server settings.
+        Password must be RSA-encrypted on the client side (see front-end
+        implementation); the server will decrypt and hash it before storing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              demo:
+                summary: Typical registration
+                value:
+                  nickname: Alice
+                  email: alice@example.com
+                  password: <encrypted-base64-string>
+      responses:
+        "200":
+          description: Registration successful
+          headers:
+            Authorization:
+              description: JWT-wrapped access_token; include in subsequent `Authorization: <token>` headers.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+              examples:
+                success:
+                  value:
+                    code: 0
+                    message: Alice, welcome aboard!
+                    data:
+                      id: "0123456789abcdef0123456789abcdef"
+                      nickname: Alice
+                      email: alice@example.com
+                      avatar: ""
+                      language: English
+                      color_schema: Bright
+                      timezone: UTC+8	Asia/Shanghai
+                      last_login_time: "2024-05-20T12:34:56Z"
+                      login_channel: password
+                      is_superuser: false
+        "400":
+          description: Validation error (missing fields, bad email or registration disabled)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error while creating user or related tenant records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [nickname, email, password]
+      properties:
+        nickname:
+          type: string
+          description: Display name
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: RSA-encrypted password, base64-encoded
+    User:
+      type: object
+      description: Subset of the `User` table returned to the client
+      properties:
+        id:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+        email:
+          type: string
+          format: email
+        avatar:
+          type: string
+          description: Base64 image string
+        language:
+          type: string
+        color_schema:
+          type: string
+        timezone:
+          type: string
+        last_login_time:
+          type: string
+          format: date-time
+        login_channel:
+          type: string
+        is_superuser:
+          type: boolean
+    RegisterResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 0 on success
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/User"
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string

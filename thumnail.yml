@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: Ragflow – Document Thumbnails API
+  version: 1.0.0
+  description: |
+    Retrieve thumbnail images (PNG, base-64 encoded or relative URI) for one or more documents.
+
+paths:
+  /v1/document/thumbnails:
+    get:
+      summary: Get document thumbnails
+      description: |
+        Returns a map whose keys are document IDs and whose values are thumbnail
+        representations.  
+        • If the value starts with `data:image/png;base64,` it is an in-line base-64 PNG.  
+        • Otherwise it is a relative URL (e.g. `/v1/document/image/{kb_id}-{file}`).
+      parameters:
+        - name: doc_ids
+          in: query
+          description: Comma-separated list of document IDs to fetch thumbnails for.
+          required: true
+          schema:
+            type: string
+            example: "64cf05c1eb8a4d98b502f63f,64cf05c1eb8a4d98b502f640"
+      responses:
+        '200':
+          description: Thumbnails successfully returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentThumbnailMapResponse'
+        '400':
+          description: Missing or invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    RetCode:
+      type: integer
+      description: Business-level response code
+      enum: [0, 101, 500]   # 0-SUCCESS, 101-ARGUMENT_ERROR, 500-SERVER_ERROR
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/RetCode'
+        message:
+          type: string
+        data:
+          nullable: true
+          description: Optional extra details
+
+    DocumentThumbnailMapResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          $ref: '#/components/schemas/RetCode'
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          additionalProperties:
+            type: string
+            description: Base-64 PNG or relative thumbnail URL
+          example:
+            "64cf05c1eb8a4d98b502f63f": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg…"
+            "64cf05c1eb8a4d98b502f640": "/v1/document/image/1234-abc.png"
